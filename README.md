@@ -1,4 +1,4 @@
-# Polars-Dates
+# Polars-GeoTools
 
 Geo tools for [Polars](https://www.pola.rs/).
 
