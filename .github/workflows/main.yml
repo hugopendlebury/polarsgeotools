@@ -1,17 +1,17 @@
 name: Release Python
 
 on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - '*'
+  pull_request:
   workflow_dispatch:
-    inputs:
-      # Latest commit to include with the release. If omitted, use the latest commit on the main branch.
-      sha:
-        description: Commit SHA
-        type: string
-      # Create the sdist and build the wheels, but do not publish to PyPI / GitHub.
-      dry-run:
-        description: Dry run
-        type: boolean
-        default: false
+
+permissions:
+  contents: read
 
 env:
   PYTHON_VERSION: '3.8'
