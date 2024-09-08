@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Literal, Sequence
 import polars as pl
 from polars.utils.udfs import _get_shared_lib_location
 
-from polarsgeotools.utils import parse_into_expr
+from polarslatlontools.utils import parse_into_expr
 
 if sys.version_info >= (3, 10):
     from typing import TypeAlias

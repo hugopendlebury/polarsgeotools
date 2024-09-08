@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import polarsgeotools.namespace  # noqa: F401
-from polarsgeotools.functions import (
+import polarsgeoutils.namespace  # noqa: F401
+from polarsgeoutils.functions import (
     find_nearest,
     find_nearest_cache
     #lookup_timezone,

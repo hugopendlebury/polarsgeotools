@@ -1109,7 +1109,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "polarsgeotools"
+name = "polarsgeoutils"
 version = "0.34.2"
 dependencies = [
  "chrono",

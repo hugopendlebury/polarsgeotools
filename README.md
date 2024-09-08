@@ -1,4 +1,4 @@
-# Polars-GeoTools
+# Polars-GeoUtils
 
 Geo tools for [Polars](https://www.pola.rs/).
 
@@ -15,9 +15,9 @@ Installation
 
 First, you need to [install Polars](https://pola-rs.github.io/polars/user-guide/installation/).
 
-Then, you'll need to install `polarsgeotools`:
+Then, you'll need to install `polarsgeoutils`:
 ```console
-pip install polarsgeotools
+pip install polarsgeoutils
 ```
 
 Usage
