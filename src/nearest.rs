@@ -1,61 +1,10 @@
-use std::borrow::Borrow;
-
 use kdtree::KdTree;
-use kdtree::ErrorKind;
 use kdtree::distance::squared_euclidean;
-use lazy_static::lazy_static;
 use polars::prelude::*;
 use log::info;
-use polars_core::export::ahash::HashMap;
-use polars_core::export::ahash::HashMapExt;
 use itertools::izip;
-use haversine::{distance, Location};
+use haversine::Location;
 
-use std::mem;
-
-use crate::nearest;
-
-//Rust doesn't impletement eq for f64 so split the f64 into parts
-fn integer_decode(val: f64) -> (u64, i16, i8) {
-    let bits: u64 = unsafe { mem::transmute(val) };
-    let sign: i8 = if bits >> 63 == 0 { 1 } else { -1 };
-    let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
-    let mantissa = if exponent == 0 {
-        (bits & 0xfffffffffffff) << 1
-    } else {
-        (bits & 0xfffffffffffff) | 0x10000000000000
-    };
-
-    exponent -= 1023 + 52;
-    (mantissa, exponent, sign)
-}
-
-#[derive(Hash, Eq, PartialEq, Clone, Copy)]
-struct Distance((u64, i16, i8));
-
-impl Distance {
-    fn new(val: f64) -> Distance {
-        Distance(integer_decode(val))
-    }
-}
-
-#[derive(Eq, Hash, PartialEq, Clone, Copy)]
-struct Coordinates{
-    lat: Distance,
-    lon: Distance
-}
-
-struct ResolvedCoordinates{
-    located: bool,
-    lat: Distance,
-    lon: Distance,
-    identifier: String,
-    distance: Distance
-}
-
-lazy_static! {
-    static ref LOCATION_CACHE : HashMap::<Coordinates, ResolvedCoordinates> =  HashMap::<Coordinates, ResolvedCoordinates>::new();
-}
 
 
 pub fn knn_full_output(_: &[Field]) -> PolarsResult<Field> {

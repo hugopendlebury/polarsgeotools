@@ -2,7 +2,6 @@ mod nearest;
 mod expressions;
 use pyo3::types::PyModule;
 use pyo3::{pymodule, PyResult, Python};
-use pyo3::prelude::*;
 
 #[cfg(target_os = "linux")]
 use jemallocator::Jemalloc;
