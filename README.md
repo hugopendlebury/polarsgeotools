@@ -10,9 +10,6 @@ Geo tools for [Polars](https://www.pola.rs/).
 - ✅ find nearest locations based on latitude / longitude
 
 
-
-
-
 Installation
 ------------
 
