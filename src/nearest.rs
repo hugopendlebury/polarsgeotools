@@ -34,7 +34,7 @@ pub fn nearest_output(_: &[Field]) -> PolarsResult<Field> {
     Ok(Field::new("locatedresults", DataType::Struct(v)))
 }
 
-pub(crate) fn impl_find_nearest(
+pub(crate) fn impl_find_nearest_knn_tree(
     coordinates: &[Series]
 )  -> Result<Series, PolarsError> {
 
@@ -147,7 +147,7 @@ fn get_coordinate_iter<'a>(lats: &'a Series, lons: &'a Series) -> Result<std::it
 
 
 
-pub(crate) fn impl_find_nearest_cache(
+pub(crate) fn impl_find_nearest(
     coordinates: &[Series]
 )  -> Result<Series, PolarsError> {
 

@@ -25,6 +25,19 @@ if TYPE_CHECKING:
     from polars import Expr
     from polars.type_aliases import Ambiguous
 
+def find_nearest_knn_tree(latitude: str | pl.Expr, 
+                 longitude: IntoExpr, 
+                 find_latitudes : IntoExpr,
+                 find_longitudes: IntoExpr,
+                 identifier: IntoExpr) -> pl.Expr:
+    expr = parse_into_expr(latitude)
+    return expr.register_plugin(
+        lib=lib,
+        symbol="find_nearest_knn_tree",
+        args=[longitude, find_latitudes, find_longitudes, identifier],
+        is_elementwise=True,
+    )
+
 def find_nearest(latitude: str | pl.Expr, 
                  longitude: IntoExpr, 
                  find_latitudes : IntoExpr,
@@ -34,19 +47,6 @@ def find_nearest(latitude: str | pl.Expr,
     return expr.register_plugin(
         lib=lib,
         symbol="find_nearest",
-        args=[longitude, find_latitudes, find_longitudes, identifier],
-        is_elementwise=True,
-    )
-
-def find_nearest_cache(latitude: str | pl.Expr, 
-                 longitude: IntoExpr, 
-                 find_latitudes : IntoExpr,
-                 find_longitudes: IntoExpr,
-                 identifier: IntoExpr) -> pl.Expr:
-    expr = parse_into_expr(latitude)
-    return expr.register_plugin(
-        lib=lib,
-        symbol="find_nearest_cache",
         args=[longitude, find_latitudes, find_longitudes, identifier],
         is_elementwise=True,
     )
