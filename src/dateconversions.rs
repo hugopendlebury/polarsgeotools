@@ -133,6 +133,7 @@ fn naive_local_to_naive_local_in_new_time_zone(
     }
 }
 
+
 #[derive(Eq, Hash, PartialEq, Copy, Clone)]
 struct GeoPoint {
     lat: NotNan<f64>,
@@ -145,6 +146,66 @@ struct GeoPointTime{
     dt: i64
 }
 
+#[derive(Eq, Hash, PartialEq)]
+struct DateTimeZone{
+    timezone: String,
+    dt: i64
+}
+
+pub(crate) fn impl_to_local_in_new_timezone_using_timezone(
+    dates: &Series,
+    timezones: &Series
+)  -> PolarsResult<Series> {
+
+    let dtype = dates.dtype();
+
+    let from_time_zone = "UTC";
+    let from_tz = parse_time_zone(from_time_zone)?;
+
+    let dates_iter = dates.datetime()?.into_iter();
+    let timezone_iter = timezones.utf8()?.into_iter();
+
+    let timestamp_to_datetime: fn(i64) -> NaiveDateTime = match dtype {
+        DataType::Datetime(TimeUnit::Microseconds, _) => timestamp_us_to_datetime,
+        DataType::Datetime(TimeUnit::Milliseconds, _) => timestamp_ms_to_datetime,
+        DataType::Datetime(TimeUnit::Nanoseconds, _) => timestamp_ns_to_datetime,
+        _ => panic!("Unsupported dtype {}", dtype)
+    };
+
+    let results = dates_iter.zip(timezone_iter).map(|fields| {
+        match fields.0 {
+            Some(dt) => {
+                //ok we have  a date
+                match fields.1 {
+                    Some(timezone) => {
+                        //get the converted date.
+                        let ndt = timestamp_to_datetime(dt);
+                        let to_tz = parse_time_zone(timezone)?;
+                        let result = naive_local_to_naive_local_in_new_time_zone(&from_tz, &to_tz, ndt, &Ambiguous::Raise)?;
+                        Ok::<Option<NaiveDateTime>, PolarsError>(Some(result))
+                    } None => {
+                        //No timezone
+                        Ok::<Option<NaiveDateTime>, PolarsError>(None)
+                    }
+                }
+
+            } None => {
+                Ok::<Option<NaiveDateTime>, PolarsError>(None)
+            }
+        }
+    });
+
+    let data = results.map(|r| {
+        match r {
+           Ok(d) => { d },
+           Err(_) => { None }
+        }
+    });
+
+    let s = Series::new("ts", data.collect::<Vec<_>>());
+    Ok(s)
+
+}
 
 pub(crate) fn impl_to_local_in_new_timezone(
     dates: &Series,
@@ -207,6 +268,106 @@ pub(crate) fn impl_to_local_in_new_timezone(
                             let result = naive_local_to_naive_local_in_new_time_zone(&from_tz, &to_tz, ndt, &Ambiguous::Raise)?;
                             dates_cache.insert(location_time, result);
                             Ok::<Option<NaiveDateTime>, PolarsError>(Some(result))
+                        }
+                    }
+                } else {
+                    polars_bail!(ComputeError:"Is not struct type")
+                }
+
+   
+            });
+    
+    let data = results.map(|r| {
+        match r {
+           Ok(d) => { d },
+           Err(_) => { None }
+        }
+    });
+
+    let s = Series::new("ts", data.collect::<Vec<_>>());
+    Ok(s)
+
+
+}
+
+
+
+
+pub(crate) fn impl_utc_to_local_in_new_timezone_using_timezone_cache(
+    dates: &Series,
+    lat: &Series,
+    lons: &Series
+)  -> PolarsResult<Series> {
+    let dtype = dates.dtype();
+
+    let from_time_zone = "UTC";
+    let from_tz = parse_time_zone(from_time_zone)?;
+
+
+    let mut coordinates_cache = HashMap::<GeoPoint, &str>::new();
+    let mut dates_cache = HashMap::<DateTimeZone, NaiveDateTime>::new();
+    
+    let dates_iter = dates.datetime()?.into_iter();
+    let lats_iter = lat.f64()?.into_iter();
+    let lons_iter = lons.f64()?.into_iter();
+
+    let timestamp_to_datetime: fn(i64) -> NaiveDateTime = match dtype {
+        DataType::Datetime(TimeUnit::Microseconds, _) => timestamp_us_to_datetime,
+        DataType::Datetime(TimeUnit::Milliseconds, _) => timestamp_ms_to_datetime,
+        DataType::Datetime(TimeUnit::Nanoseconds, _) => timestamp_ns_to_datetime,
+        _ => panic!("Unsupported dtype {}", dtype)
+    };
+
+    let results = lats_iter.zip(lons_iter).
+            zip(dates_iter).map(|coords| {
+        
+                let lat = coords.0.0.unwrap();
+                let lng = coords.0.1.unwrap();
+                let coordinates = GeoPoint{lat: NotNan::new(lat).unwrap(), lon:NotNan::new(lng).unwrap()};
+               
+                if let Some(timestamp) = coords.1 {
+
+                    let cached_timezone =  coordinates_cache.get(&coordinates);
+                    match cached_timezone {
+
+                        Some(timezone) => {
+                            //Ok we have a timezone
+                            let check_date_location = DateTimeZone{
+                                timezone: String::from(*timezone),
+                                dt: timestamp
+                            };
+                            let converted_date_in_cache = dates_cache.get(&check_date_location);
+                            match converted_date_in_cache {
+                                Some(dt) => {
+                                    Ok::<Option<NaiveDateTime>, PolarsError>(Some(*dt))
+                                }
+                                None => {
+                                    let ndt = timestamp_to_datetime(timestamp);
+                                    let to_tz = parse_time_zone(timezone)?;
+                                    let result = naive_local_to_naive_local_in_new_time_zone(&from_tz, &to_tz, ndt, &Ambiguous::Earliest)?;
+                                    dates_cache.insert(check_date_location, result);
+                                    Ok::<Option<NaiveDateTime>, PolarsError>(Some(result))
+                                }
+                            }
+                           
+                        },
+                        None => {
+                            //Ok we don't have a timezone
+                            let timezone_names = FINDER.get_tz_names(lng, lat);
+                            let timezone = timezone_names.last().map_or("UNKNOWN", |f| f);
+                            coordinates_cache.insert(coordinates.clone(), timezone);
+                            //Now we have a timezone get the datetime
+                            let ndt = timestamp_to_datetime(timestamp);
+                            let to_tz = parse_time_zone(timezone)?;
+                            let result = naive_local_to_naive_local_in_new_time_zone(&from_tz, &to_tz, ndt, &Ambiguous::Earliest)?;
+                            let check_date_location = DateTimeZone{
+                                timezone: String::from(timezone),
+                                dt: timestamp
+                            };
+                            dates_cache.insert(check_date_location, result);
+                            Ok::<Option<NaiveDateTime>, PolarsError>(Some(result))
+                            
+
                         }
                     }
                 } else {
