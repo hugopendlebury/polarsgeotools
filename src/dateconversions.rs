@@ -56,9 +56,10 @@ struct Coordinates{
     lon: Distance
 }
 
+#[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq, Clone, Copy)]
 struct CoodinateTime{
-    lcation: Coordinates,
+    location: Coordinates,
     dt: i64
 }
 
