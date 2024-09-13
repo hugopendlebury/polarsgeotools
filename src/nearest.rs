@@ -156,19 +156,7 @@ pub(crate) fn impl_find_nearest(
     let incomming_lons = &coordinates[1];
   
     let lats = &incomming_lats.unique()?.sort(false);
-    let lons = &incomming_lons.unique()?.sort(false);
-
-    //let df = df!(
-    //     "lats" => incomming_lats
-    //    ,"lons" => incomming_lons
-    //)?.sort(["lats"], false, true);
-
-    //let binding = df?;
-    //let columns = binding.get_columns();
-
-    //let lats = &columns[0];
-    //let lons = &columns[1];
-    
+    let lons = &incomming_lons.unique()?.sort(false);  
 
     let to_find_lats = &coordinates[2];
     let to_find_lons = &coordinates[3];

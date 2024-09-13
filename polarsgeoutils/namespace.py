@@ -1,48 +1,23 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, Callable
 
 import polars as pl
 
-if TYPE_CHECKING:
-    from polars.type_aliases import IntoExpr, PolarsDataType
+from polarsgeoutils import functions
 
 
-def parse_into_expr(
-    expr: IntoExpr,
-    *,
-    str_as_lit: bool = False,
-    list_as_lit: bool = True,
-    dtype: PolarsDataType | None = None,
-) -> pl.Expr:
-    """
-    Parse a single input into an expression.
+@pl.api.register_expr_namespace("geoutils")
+class ExprGeoUtilsNamespace:
+    """Utilitied related to lat / lon."""
 
-    Parameters
-    ----------
-    expr
-        The input to be parsed as an expression.
-    str_as_lit
-        Interpret string input as a string literal. If set to `False` (default),
-        strings are parsed as column names.
-    list_as_lit
-        Interpret list input as a lit literal, If set to `False`,
-        lists are parsed as `Series` literals.
-    dtype
-        If the input is expected to resolve to a literal with a known dtype, pass
-        this to the `lit` constructor.
+    def __init__(self, expr: pl.Expr) -> None:
+        self._expr = expr
 
-    Returns
-    -------
-    polars.Expr
-    """
-    if isinstance(expr, pl.Expr):
-        pass
-    elif isinstance(expr, str) and not str_as_lit:
-        expr = pl.col(expr)
-    elif isinstance(expr, list) and not list_as_lit:
-        expr = pl.lit(pl.Series(expr), dtype=dtype)
-    else:
-        expr = pl.lit(expr, dtype=dtype)
+    def __getattr__(self, function_name: str) -> Callable[[Any], pl.Expr]:
+        def func(*args: Any, **kwargs: Any) -> pl.Expr:
+            return getattr(functions, function_name)(
+                self._expr, *args, **kwargs
+            )
 
-    return expr
+        return func

@@ -58,7 +58,7 @@ def lookup_timezone(expr: str | pl.Expr, other: IntoExpr) -> pl.Expr:
     Examples
     --------
     >>> import polars as pl
-    >>> import polars_dates as pl_dates
+    >>> import polarsgeoutils as geo
     >>> from datetime import datetime
     >>> df = (
     ...     pl.DataFrame(data = {'lat' : [51.5054, 51.5054, 40.7128, 40.7128, 40.7128], 
@@ -71,7 +71,7 @@ def lookup_timezone(expr: str | pl.Expr, other: IntoExpr) -> pl.Expr:
     ...                         'values' : [5,5,5,10,10]}
     ...                 )
     ...     .with_columns(
-    ...          timezone = pl_dates.lookup_timezone(pl.col("lat"), pl.col("lon"))
+    ...          timezone = geo.lookup_timezone(pl.col("lat"), pl.col("lon"))
     ...     )
     ... ) 
 
