@@ -6,7 +6,8 @@ from polarsgeoutils.functions import (
     find_nearest_knn_tree,
     lookup_timezone,
     to_local_in_new_timezone,
-    to_local_in_new_timezone_struct
+    to_local_in_new_timezone_struct,
+    to_local_in_new_timezone_cache_timezone_string
 )
 
 #from ._internal import __version__
@@ -17,5 +18,6 @@ __all__ = [
     "lookup_timezone",
     "to_local_in_new_timezone",
     "to_local_in_new_timezone_struct",
+    "to_local_in_new_timezone_cache_timezone_string"
     "__version__",
 ]
