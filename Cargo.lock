@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "polarsgeoutils"
-version = "0.34.11"
+version = "0.34.12"
 dependencies = [
  "chrono",
  "chrono-tz",
