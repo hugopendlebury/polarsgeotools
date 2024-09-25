@@ -18,6 +18,16 @@ fn find_nearest(inputs: &[Series]) -> Result<Series, PolarsError> {
     impl_find_nearest(inputs)
 }
 
+
+
+
+#[polars_expr(output_type_func=nearest_output)]
+fn find_nearest_multiple(inputs: &[Series], kwargs: NumberOfPointKwargs) -> Result<Series, PolarsError> {
+    //init_log();
+   // pyo3_log::init();
+    impl_find_nearest_multiple(inputs, kwargs)
+}
+
 #[polars_expr(output_type=Utf8)]
 fn lookup_timezone(inputs: &[Series]) -> PolarsResult<Series> {
     

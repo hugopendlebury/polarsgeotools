@@ -51,6 +51,22 @@ def find_nearest(latitude: str | pl.Expr,
         is_elementwise=True,
     )
 
+def find_nearest_multiple(latitude: str | pl.Expr, 
+                 longitude: IntoExpr, 
+                 find_latitudes : IntoExpr,
+                 find_longitudes: IntoExpr,
+                 identifier: IntoExpr,
+                 number_of_points=4,
+                 max_distance=100) -> pl.Expr:
+    expr = parse_into_expr(latitude)
+    return expr.register_plugin(
+        lib=lib,
+        symbol="find_nearest_multiple",
+        args=[longitude, find_latitudes, find_longitudes, identifier],
+        kwargs={"number_of_points" : number_of_points, "max_distance": max_distance},
+        is_elementwise=True,
+    )
+
 def lookup_timezone(expr: str | pl.Expr, other: IntoExpr) -> pl.Expr:
     """
     Return the Timezone as a string based on the latitude and longitude of a point
