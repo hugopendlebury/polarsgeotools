@@ -20,6 +20,6 @@ __all__ = [
     "lookup_timezone",
     "to_local_in_new_timezone",
     "to_local_in_new_timezone_struct",
-    "to_local_in_new_timezone_cache_timezone_string"
-    "__version__",
+    "to_local_in_new_timezone_cache_timezone_string",
+    "__version__"
 ]

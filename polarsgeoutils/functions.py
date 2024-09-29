@@ -23,7 +23,8 @@ lib = _get_shared_lib_location(__file__)
 
 if TYPE_CHECKING:
     from polars import Expr
-    from polars.type_aliases import Ambiguous
+    # The following have no equivalent on the Rust side
+    Ambiguous: TypeAlias = Literal["Earliest", "Latest", "Raise"]
 
 def find_nearest_knn_tree(latitude: str | pl.Expr, 
                  longitude: IntoExpr, 
@@ -113,7 +114,7 @@ def lookup_timezone(expr: str | pl.Expr, other: IntoExpr) -> pl.Expr:
     )
 
 
-def convert_date_using_timezone(expr: str | pl.Expr, other: IntoExpr) -> pl.Expr:
+def convert_date_using_timezone(expr: str | pl.Expr, other: IntoExpr, ambiguous: Ambiguous = "Earliest") -> pl.Expr:
     """
     Return the Timezone as a string based on the latitude and longitude of a point
 
@@ -158,9 +159,10 @@ def convert_date_using_timezone(expr: str | pl.Expr, other: IntoExpr) -> pl.Expr
         symbol="to_local_in_new_timezone_using_timezone",
         args=[other],
         is_elementwise=True,
+        kwargs={"ambiguous" : ambiguous}
     )
 
-def to_local_in_new_timezone_struct(expr: str | pl.Expr, lat_lon: IntoExpr) -> pl.Expr:
+def to_local_in_new_timezone_struct(expr: str | pl.Expr, lat_lon: IntoExpr, ambiguous: Ambiguous = "Earliest") -> pl.Expr:
     """
     Uses the latitude and longitude to find the time zone then returns a date / time which is 
     in the local time.
@@ -202,9 +204,10 @@ def to_local_in_new_timezone_struct(expr: str | pl.Expr, lat_lon: IntoExpr) -> p
         symbol="to_local_in_new_timezone_struct",
         args=[lat_lon],
         is_elementwise=True,
+        kwargs={"ambiguous" : ambiguous}
     )
 
-def to_local_in_new_timezone(expr: str | pl.Expr, lat: IntoExpr, lon: IntoExpr) -> pl.Expr:
+def to_local_in_new_timezone(expr: str | pl.Expr, lat: IntoExpr, lon: IntoExpr, ambiguous: Ambiguous = "Earliest") -> pl.Expr:
     """
     Uses the latitude and longitude to find the time zone then returns a date / time which is 
     in the local time.
@@ -245,9 +248,10 @@ def to_local_in_new_timezone(expr: str | pl.Expr, lat: IntoExpr, lon: IntoExpr) 
         symbol="to_local_in_new_timezone",
         args=[lat, lon],
         is_elementwise=True,
+        kwargs={"ambiguous" : ambiguous}
     )
 
-def to_local_in_new_timezone_cache_timezone_string(expr: str | pl.Expr, lat: IntoExpr, lon: IntoExpr) -> pl.Expr:
+def to_local_in_new_timezone_cache_timezone_string(expr: str | pl.Expr, lat: IntoExpr, lon: IntoExpr, ambiguous: Ambiguous = "Earliest") -> pl.Expr:
     """
     Uses the latitude and longitude to find the time zone then returns a date / time which is 
     in the local time.
@@ -293,4 +297,5 @@ def to_local_in_new_timezone_cache_timezone_string(expr: str | pl.Expr, lat: Int
         symbol="to_local_in_new_timezone_cache_timezone_string",
         args=[lat, lon],
         is_elementwise=True,
+        kwargs={"ambiguous" : ambiguous}
     )

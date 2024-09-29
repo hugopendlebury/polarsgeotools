@@ -1,6 +1,7 @@
-mod nearest;
-mod expressions;
 mod dateconversions;
+mod expressions;
+mod nearest;
+use dateconversions::Ambiguous;
 use pyo3::types::PyModule;
 use pyo3::{pymodule, PyResult, Python};
 
@@ -13,8 +14,7 @@ static ALLOC: Jemalloc = Jemalloc;
 
 #[pymodule]
 fn _internal(_py: Python, m: &PyModule) -> PyResult<()> {
-    // A good place to install the Rust -> Python logger.
-    pyo3_log::init();
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add_class::<Ambiguous>()?;
     Ok(())
 }
