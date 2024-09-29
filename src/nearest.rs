@@ -12,6 +12,34 @@ pub struct NumberOfPointKwargs {
     max_distance: u32
 }
 
+pub struct NearestDetails<'a> {
+    latitude: f64,
+    longitude: f64,
+    nearest_latitude: f64,
+    nearest_longitude: f64,
+    location: Option<&'a str>,
+    distance: f64
+}
+
+
+macro_rules! struct_to_dataframe {
+    ($input:expr, [$($field:ident),+]) => {
+        {
+            let len = $input.len().to_owned();
+
+            // Extract the field values into separate vectors
+            $(let mut $field = Vec::with_capacity(len);)*
+
+            for e in $input.into_iter() {
+                $($field.push(e.$field);)*
+            }
+            df! {
+                $(stringify!($field) => $field,)*
+            }
+        }
+    };
+}
+
 pub fn knn_full_output(_: &[Field]) -> PolarsResult<Field> {
     let v = vec! [
 
@@ -150,8 +178,6 @@ fn get_coordinate_iter<'a>(lats: &'a Series, lons: &'a Series) -> Result<std::it
 }
 
 
-
-
 pub(crate) fn impl_find_nearest(
     coordinates: &[Series]
 )  -> Result<Series, PolarsError> {
@@ -190,28 +216,28 @@ pub(crate) fn impl_find_nearest(
         let location2 = Location{latitude:lat, longitude: lon};
         let dist = haversine::distance(location1, location2, haversine::Units::Kilometers);
 
-        (lat, lon, nearest_lat, nearest_lon, location, dist)
+        NearestDetails {
+            latitude: lat,
+            longitude: lon,
+            nearest_latitude: nearest_lat,
+            nearest_longitude: nearest_lon,
+            location: location,
+            distance: dist
+        }
 
     }).collect();
 
-    let results_iter = nearest_details.into_iter();
-
-
-    let source_lats = results_iter.clone().map(|c| c.0).collect::<Vec<_>>();
-    let source_lons = results_iter.clone().map(|c| c.1).collect::<Vec<_>>();
-    let nearest_lats = results_iter.clone().map(|c| c.2).collect::<Vec<_>>();
-    let nearest_lons = results_iter.clone().map(|c| c.3).collect::<Vec<_>>();
-    let nearest_location = results_iter.clone().map(|c| c.4).collect::<Vec<_>>();
-    let nearest_distance = results_iter.map(|c| c.5).collect::<Vec<_>>();
-
-    let out_df = df!(
-         "latitude" => source_lats
-        ,"longitude" => source_lons
-        ,"nearest_latitude" => nearest_lats
-        ,"nearest_longitude" => nearest_lons
-        ,"location" => nearest_location
-        ,"distance" => nearest_distance
+    let out_df = struct_to_dataframe!(nearest_details, 
+        [
+            latitude,
+            longitude,
+            nearest_longitude,
+            nearest_latitude,
+            location,
+            distance
+        ]
     );
+
 
     Ok(out_df?.into_struct("nearest").into_series())
    
@@ -264,7 +290,7 @@ pub(crate) fn impl_find_nearest_multiple(
 
         let nearest_indexes = sorted_lat.take(coordinate_slice_size).cartesian_product(sorted_lon.take(coordinate_slice_size));
 
-        let points_data : Vec<(f64, f64, f64, f64, Option<&str>, f64)> = nearest_indexes.map(|indexes| {
+        let results : Vec<NearestDetails> = nearest_indexes.map(|indexes| {
             let lat_index = indexes.0.0;
             let lon_index = indexes.1.0;
             let nearest_lat = lats.f64().expect("latitudes not f64").get(lat_index).expect("latitude was null");
@@ -276,39 +302,38 @@ pub(crate) fn impl_find_nearest_multiple(
 
             let dist = haversine::distance(location1, location2, haversine::Units::Kilometers);
 
-            (lat, lon, nearest_lat, nearest_lon, location, dist)
+            NearestDetails {
+                latitude: lat,
+                longitude: lon,
+                nearest_latitude: nearest_lat,
+                nearest_longitude: nearest_lon,
+                location: location,
+                distance: dist
+            }
         }).collect();
-
-        points_data
+        results
 
     }).collect();
 
     let results_iter = nearest_details.into_iter();
 
-    let ranked_distances = results_iter.clone().flat_map(|f| {
+    let ranked_distances = &results_iter.flat_map(|f| {
         f.into_iter().sorted_by(|a,b| {
-            a.5.total_cmp(&b.5)
+            a.distance.total_cmp(&b.distance)
         }).take(number_of_points.number_of_points.try_into().unwrap())
     }).collect::<Vec<_>>();
 
-    let source_lats = ranked_distances.clone().into_iter().map(|f| f.0).collect::<Vec<_>>();
-    let source_lons = ranked_distances.clone().into_iter().map(|f| f.1).collect::<Vec<_>>();
-    let nearest_lats = ranked_distances.clone().into_iter().map(|f| f.2).collect::<Vec<_>>();
-    let nearest_lons = ranked_distances.clone().into_iter().map(|f| f.3).collect::<Vec<_>>();
-    let nearest_location = ranked_distances.clone().into_iter().map(|f| f.4).collect::<Vec<_>>();
-    let nearest_distance = ranked_distances.clone().into_iter().map(|f| f.5).collect::<Vec<_>>();
 
-
-
-    let out_df = df!(
-        "latitude" => source_lats
-       ,"longitude" => source_lons
-       ,"nearest_latitude" => nearest_lats
-       ,"nearest_longitude" => nearest_lons
-       ,"location" => nearest_location
-       ,"distance" => nearest_distance
-   )?.lazy().filter(col("distance").lt_eq(lit(number_of_points.max_distance))).collect();
-
+    let out_df = struct_to_dataframe!(ranked_distances, 
+        [
+            latitude,
+            longitude,
+            nearest_longitude,
+            nearest_latitude,
+            location,
+            distance
+        ]
+    )?.lazy().filter(col("distance").lt_eq(lit(number_of_points.max_distance))).collect();
 
     Ok(out_df?.into_struct("nearest").into_series())
    
