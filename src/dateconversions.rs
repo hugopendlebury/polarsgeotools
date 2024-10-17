@@ -105,7 +105,7 @@ pub(crate) fn impl_lookup_timezone(lat: &Series, lons: &Series) -> PolarsResult<
 }
 
 fn parse_time_zone(time_zone: &str) -> Result<Tz, PolarsError> {
-    let x: Result<Tz, String> = time_zone.parse::<Tz>();
+    let x: Result<Tz, chrono_tz::ParseError> = time_zone.parse::<Tz>();
     match x {
         Ok(r) => Ok(r),
         Err(_) => Err(PolarsError::Io(Error::new(

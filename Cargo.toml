@@ -1,6 +1,6 @@
 [package]
 name = "polarsgeoutils"
-version = "0.34.16"
+version = "0.34.17"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html.
@@ -14,8 +14,8 @@ pyo3-polars = { version = "0.8.0", features = ["derive"] }
 pyo3-log = "0.8.1"
 log="0.4.17"
 serde = { version = "1", features = ["derive"] }
-chrono = { version = "0.4.31", default-features = false, features = ["std", "unstable-locales"] } 
-chrono-tz = "0.8.5"
+chrono = { version = "0.4.38", default-features = false, features = ["std", "unstable-locales"] } 
+chrono-tz = "0.10.0"
 #note in newer polars "abs" is in the create "ops"
 #in newer polars cum_agg feature not needed since cumsum renamed cum_sum and moved to polars-ops
 polars = { version = "=0.34.2", features = ["lazy", "strings", "dtype-date", "dtype-struct", "fmt", "abs", "cum_agg"], default-features = false }
