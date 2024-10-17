@@ -1,6 +1,6 @@
 [package]
 name = "polarsgeoutils"
-version = "0.34.15"
+version = "0.34.16"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html.

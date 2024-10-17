@@ -237,11 +237,11 @@ pub(crate) fn impl_to_local_in_new_timezone(
     };
 
     let results = lats_iter.zip(lons_iter).zip(dates_iter).map(|coords| {
-        let lat = coords.0 .0.unwrap();
-        let lng = coords.0 .1.unwrap();
+        let lat = coords.0 .0.expect("latitude should be float64");
+        let lng = coords.0 .1.expect("longitude should be float64");
         let coordinates = &GeoPoint {
-            lat: NotNan::new(lat).unwrap(),
-            lon: NotNan::new(lng).unwrap(),
+            lat: NotNan::new(lat).expect("latitude should not be nan / null"),
+            lon: NotNan::new(lng).expect("longitude should not be nan / null"),
         };
         if let Some(timestamp) = coords.1 {
             let location_time = GeoPointTime {
@@ -321,11 +321,11 @@ pub(crate) fn impl_utc_to_local_in_new_timezone_using_timezone_cache(
     };
 
     let results = lats_iter.zip(lons_iter).zip(dates_iter).map(|coords| {
-        let lat = coords.0 .0.unwrap();
-        let lng = coords.0 .1.unwrap();
+        let lat = coords.0 .0.expect("latitude should be float64");
+        let lng = coords.0 .1.expect("longitude should be float64");
         let coordinates = &GeoPoint {
-            lat: NotNan::new(lat).unwrap(),
-            lon: NotNan::new(lng).unwrap(),
+            lat: NotNan::new(lat).expect("latitude should not be nan / null"),
+            lon: NotNan::new(lng).expect("longitude should not be nan / null"),
         };
 
         if let Some(timestamp) = coords.1 {
