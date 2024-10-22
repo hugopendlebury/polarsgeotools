@@ -1,5 +1,3 @@
-use std::default;
-
 use haversine::Location;
 use itertools::{izip, Itertools};
 use kdtree::distance::squared_euclidean;
@@ -317,7 +315,7 @@ pub(crate) fn impl_find_nearest_none_null(
     );
 
     let nearest_details: Vec<_> = to_find_points
-        .map(|point_to_find| {
+        .flat_map(|point_to_find| {
             let latitude = point_to_find.0.map_or_else(|| 0.0f64, |f| f);
             let longitude = point_to_find.1.map_or_else(|| 0.0f64, |f| f);
             let location = point_to_find.2;
@@ -379,8 +377,7 @@ pub(crate) fn impl_find_nearest_none_null(
                     } else { None }
                 }).collect();
             results
-        }).flat_map(|f| f)
-        .collect();
+        }).collect();
 
 
     let out_df = struct_to_dataframe!(
@@ -565,7 +562,7 @@ pub(crate) fn impl_find_nearest_multiple(
 
 #[cfg(test)]
 mod test {
-    use polars::series::Series;
+
     use polars::prelude::*;
     use crate::nearest::*;
 

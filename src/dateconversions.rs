@@ -202,10 +202,7 @@ pub(crate) fn impl_to_local_in_new_timezone_using_timezone(
         }
     });
 
-    let data = results.map(|r| match r {
-        Ok(d) => d,
-        Err(_) => None,
-    });
+    let data = results.map(|r| r.unwrap_or_default() );
 
     let s = Series::new("ts", data.collect::<Vec<_>>());
     Ok(s)
@@ -286,10 +283,7 @@ pub(crate) fn impl_to_local_in_new_timezone(
         }
     });
 
-    let data = results.map(|r| match r {
-        Ok(d) => d,
-        Err(_) => None,
-    });
+    let data = results.map(|r| r.unwrap_or_default());
 
     let s = Series::new("ts", data.collect::<Vec<_>>());
     Ok(s)
@@ -381,10 +375,7 @@ pub(crate) fn impl_utc_to_local_in_new_timezone_using_timezone_cache(
         }
     });
 
-    let data = results.map(|r| match r {
-        Ok(d) => d,
-        Err(_) => None,
-    });
+    let data = results.map(|r| r.unwrap_or_default());
 
     let s = Series::new("ts", data.collect::<Vec<_>>());
     Ok(s)
