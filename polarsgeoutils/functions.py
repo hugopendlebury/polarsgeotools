@@ -52,6 +52,23 @@ def find_nearest(latitude: str | pl.Expr,
         is_elementwise=True,
     )
 
+def find_nearest_none_null(latitude: str | pl.Expr, 
+                 longitude: IntoExpr, 
+                 values: IntoExpr,
+                 find_latitudes : IntoExpr,
+                 find_longitudes: IntoExpr,
+                 identifier: IntoExpr,
+                 max_distance=75) -> pl.Expr:
+    max_distance = float(max_distance)
+    expr = parse_into_expr(latitude)
+    return expr.register_plugin(
+        lib=lib,
+        symbol="find_nearest_none_null",
+        args=[longitude, values, find_latitudes, find_longitudes, identifier],
+        kwargs={"max_distance": max_distance},
+        is_elementwise=True,
+    )
+
 def find_nearest_multiple(latitude: str | pl.Expr, 
                  longitude: IntoExpr, 
                  find_latitudes : IntoExpr,

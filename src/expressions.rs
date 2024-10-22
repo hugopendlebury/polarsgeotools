@@ -27,6 +27,14 @@ fn find_nearest_multiple(
     impl_find_nearest_multiple(inputs, kwargs)
 }
 
+#[polars_expr(output_type_func=nearest_output_with_value)]
+fn find_nearest_none_null(
+    inputs: &[Series],
+    kwargs: MaxDistanceKwargs,
+) -> Result<Series, PolarsError> {
+    impl_find_nearest_none_null(inputs, kwargs)
+}
+
 #[polars_expr(output_type=Utf8)]
 fn lookup_timezone(inputs: &[Series]) -> PolarsResult<Series> {
     let lats = &inputs[0];

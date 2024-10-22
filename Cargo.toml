@@ -1,6 +1,6 @@
 [package]
 name = "polarsgeoutils"
-version = "0.34.17"
+version = "0.34.18"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html.
@@ -18,10 +18,11 @@ chrono = { version = "0.4.38", default-features = false, features = ["std", "uns
 chrono-tz = "0.10.0"
 #note in newer polars "abs" is in the create "ops"
 #in newer polars cum_agg feature not needed since cumsum renamed cum_sum and moved to polars-ops
-polars = { version = "=0.34.2", features = ["lazy", "strings", "dtype-date", "dtype-struct", "fmt", "abs", "cum_agg"], default-features = false }
+polars = { version = "=0.34.2", features = ["lazy", "strings", "dtype-date", "dtype-struct", "fmt", "abs", "cum_agg", "parquet"], default-features = false }
 polars-core = { version = "=0.34.2", default-features = false }
 polars-time = { version = "=0.34.2", features = ["timezones"], default-features = false }
 polars-ops = { version = "=0.34.2", default-features = false }
+polars-io = { version = "=0.34.2" }
 
  
 polars-arrow = { version = "=0.34.2", default-features = false }
