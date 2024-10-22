@@ -315,7 +315,7 @@ pub(crate) fn impl_find_nearest_none_null(
     );
 
     let nearest_details: Vec<_> = to_find_points
-        .flat_map(|point_to_find| {
+        .map_while(|point_to_find| {
             let latitude = point_to_find.0.map_or_else(|| 0.0f64, |f| f);
             let longitude = point_to_find.1.map_or_else(|| 0.0f64, |f| f);
             let location = point_to_find.2;
@@ -333,7 +333,7 @@ pub(crate) fn impl_find_nearest_none_null(
             let mut found_all_points = false;
 
             let results: Vec<NearestDetails> = nearest_indexes
-                .filter_map(|indexes| {
+                .map_while(|indexes| {
                     if !found_all_points {
                         let lat_index = indexes.0 .0;
                         let lon_index = indexes.1 .0;
@@ -376,8 +376,8 @@ pub(crate) fn impl_find_nearest_none_null(
                         }
                     } else { None }
                 }).collect();
-            results
-        }).collect();
+            Some(results)
+        }).flatten().collect();
 
 
     let out_df = struct_to_dataframe!(
@@ -570,7 +570,7 @@ mod test {
     fn test_nearest_none_null() {
 
         let locations = df!(
-            "place" => &["Canary Wharf", "Lewes", "Manchester"],
+            "place" => &["Canary Wharf", "Manchester", "Lewes"],
             "lats" => &[51.5054, 53.4808, 52.5227],
             "lons" => &[-0.027176, 2.2426, 0.0027],
   
