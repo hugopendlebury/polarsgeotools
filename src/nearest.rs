@@ -5,10 +5,12 @@ use kdtree::KdTree;
 use log::info;
 use polars::prelude::*;
 use serde::Deserialize;
+
+/* 
 use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
 use std::collections::HashMap;
-
+*/
 
 #[derive(Deserialize)]
 pub struct NumberOfPointKwargs {
@@ -41,7 +43,7 @@ pub struct NearestDetailsWithValue<'a> {
     distance: f64,
     value: f64,
 }
-*/
+
 
 
 #[derive(Debug, Eq, Hash, PartialEq, Copy, Clone)]
@@ -58,7 +60,7 @@ impl LocationKey {
         Some(LocationKey { lat: lat_value , lon: lon_value})
     }
 }
-
+*/
 macro_rules! struct_to_dataframe {
     ($input:expr, [$($field:ident),+]) => {
         {
@@ -327,23 +329,27 @@ pub(crate) fn impl_find_nearest_none_null(
 
     let incomming_lats = &coordinates[0];
     let incomming_lons = &coordinates[1];
-    let values = &coordinates[2];
+
     /* 
+    let values = &coordinates[2];
+    
     let values_df = DataFrame::new(vec![incomming_lats.clone(), 
                                                                     incomming_lons.clone(), values.clone()]);
                                                                     */
 
-
+    /* 
     let mut cache = HashMap::<LocationKey, Option<Decimal>>::new();
     let lats_iter = incomming_lats.f64()?.into_iter();
     let lons_iter = incomming_lons.f64()?.into_iter();
+
+
     let value_vec : Vec<_> = values.f64()?.into_iter().collect();
 
     lats_iter.zip(lons_iter).enumerate().for_each(|(i, v)| {
         let lat_lon = LocationKey::from_f64(v.0.unwrap(), v.1.unwrap()).unwrap();
         cache.insert(lat_lon, Decimal::from_f64_retain(value_vec[i].unwrap()));
     });
-
+    */
 
     let lats = &incomming_lats.unique()?.sort(false);
     let lons = &incomming_lons.unique()?.sort(false);
