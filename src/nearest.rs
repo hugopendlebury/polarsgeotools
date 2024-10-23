@@ -5,6 +5,9 @@ use kdtree::KdTree;
 use log::info;
 use polars::prelude::*;
 use serde::Deserialize;
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
+use std::collections::HashMap;
 
 
 #[derive(Deserialize)]
@@ -26,6 +29,34 @@ pub struct NearestDetails<'a> {
     nearest_longitude: f64,
     location: Option<&'a str>,
     distance: f64,
+}
+
+/*
+pub struct NearestDetailsWithValue<'a> {
+    latitude: f64,
+    longitude: f64,
+    nearest_latitude: f64,
+    nearest_longitude: f64,
+    location: Option<&'a str>,
+    distance: f64,
+    value: f64,
+}
+*/
+
+
+#[derive(Debug, Eq, Hash, PartialEq, Copy, Clone)]
+pub struct LocationKey{
+    pub lat: Decimal,
+    pub lon: Decimal,
+}
+
+impl LocationKey {
+    pub fn from_f64(lat: f64, lon: f64) -> Option<LocationKey> {
+        let lat_value = Decimal::from_f64(lat)?;
+        let lon_value = Decimal::from_f64(lon)?;
+
+        Some(LocationKey { lat: lat_value , lon: lon_value})
+    }
 }
 
 macro_rules! struct_to_dataframe {
@@ -297,8 +328,22 @@ pub(crate) fn impl_find_nearest_none_null(
     let incomming_lats = &coordinates[0];
     let incomming_lons = &coordinates[1];
     let values = &coordinates[2];
+    /* 
     let values_df = DataFrame::new(vec![incomming_lats.clone(), 
                                                                     incomming_lons.clone(), values.clone()]);
+                                                                    */
+
+
+    let mut cache = HashMap::<LocationKey, Option<Decimal>>::new();
+    let lats_iter = incomming_lats.f64()?.into_iter();
+    let lons_iter = incomming_lons.f64()?.into_iter();
+    let value_vec : Vec<_> = values.f64()?.into_iter().collect();
+
+    lats_iter.zip(lons_iter).enumerate().for_each(|(i, v)| {
+        let lat_lon = LocationKey::from_f64(v.0.unwrap(), v.1.unwrap()).unwrap();
+        cache.insert(lat_lon, Decimal::from_f64_retain(value_vec[i].unwrap()));
+    });
+
 
     let lats = &incomming_lats.unique()?.sort(false);
     let lons = &incomming_lons.unique()?.sort(false);
@@ -361,6 +406,10 @@ pub(crate) fn impl_find_nearest_none_null(
                         let distance =
                             haversine::distance(location1, location2, haversine::Units::Kilometers);
 
+                        //let lkp_key = LocationKey::from_f64(nearest_latitude, nearest_longitude).unwrap();
+
+                        //let value = cache.get(&lkp_key)?;
+
                         if distance < max_distance_kwargs.max_distance  {
                             Some(NearestDetails {
                                 latitude,
@@ -369,6 +418,7 @@ pub(crate) fn impl_find_nearest_none_null(
                                 nearest_longitude,
                                 location,
                                 distance,
+                                //value : value.unwrap().into()
                             })
                         } else { 
                             found_all_points = true;
@@ -394,11 +444,12 @@ pub(crate) fn impl_find_nearest_none_null(
 
     println!("out_df = {:?}", out_df);
 
+    /* 
     let joined = values_df?.join(&out_df, 
     [incomming_lats.name(), incomming_lons.name()], 
     ["nearest_latitude", "nearest_longitude"], JoinArgs::new(JoinType::Inner));
 
-    /* 
+    
         joined?.sort(["location", "distance"] , false, true)
         ?.lazy().group_by(["location", "latitude_right", "longitude_right"])
         .agg([
@@ -410,8 +461,7 @@ pub(crate) fn impl_find_nearest_none_null(
         ]).with_columns([
             col("value_flags")
         ]);
-        */
-        /* 
+
         .agg(
             col("value").is_not_null().alias("value_flags"),
             col("value"),
@@ -430,7 +480,7 @@ pub(crate) fn impl_find_nearest_none_null(
 
     //let _ =joined?.lazy().sink_parquet("/var/tmp/joined.parquet".into(), ParquetWriteOptions::default());
 
-    Ok(joined?.into_struct("nearest").into_series())
+    Ok(out_df.into_struct("nearest").into_series())
 }
 
 
