@@ -33,6 +33,16 @@ pub struct NearestDetails<'a> {
     distance: f64,
 }
 
+/* 
+#[derive(Debug, Copy, Clone)]
+pub struct CoordinateWithLevel {
+    grid_level: u16,
+    latitude: f64,
+    longitude: f64,
+}
+*/
+
+
 #[derive(Debug, Copy, Clone)]
 pub struct NearestDetailsWithValue<'a> {
     latitude: f64,
@@ -333,12 +343,48 @@ fn nearest_coordinates<'a>(
     }
 }
 
+fn make_coordinates<'a> (nearest: NearestDetails<'a>, 
+                        upper_range: i32, 
+                        r1: f64,
+                        r2: f64,
+                        lat_max: f64,
+                        lat_min: f64) -> Vec<(f64, f64)> {
+
+    let mut latitudes : Vec<f64> = Vec::with_capacity((upper_range * 2) as usize);
+    let mut longitudes : Vec<f64> = Vec::with_capacity((upper_range * 2) as usize);
+    let mut coordinates : Vec<(f64, f64)> = Vec::with_capacity(upper_range  as usize * upper_range as usize);
+
+    (0..upper_range).for_each(|c| {
+        let latitude_plus = nearest.nearest_latitude + c as f64 * r1;
+        if latitude_plus >= lat_min && latitude_plus <= lat_max {
+            latitudes.push(latitude_plus);
+        }
+        let latitude_minus = nearest.nearest_latitude - c as f64 * r1;
+        if latitude_minus >= lat_min && latitude_minus <= lat_max {
+            latitudes.push(latitude_minus);
+        }
+
+        longitudes.push(nearest.nearest_longitude + c as f64 * r2);
+        longitudes.push(nearest.nearest_longitude - c as f64 * r2);
+    });
+
+    latitudes.iter().cartesian_product(longitudes.iter()).for_each(|coord| {
+        coordinates.push((*coord.0, *coord.1))
+    });
+
+    coordinates
+    
+
+}
+
 fn grid_points<'a>(
     nearest: NearestDetails<'a>,
     location: Option<&'a str>,
     num_points: i32,
     r1: f64,
     r2: f64,
+    lat_max: f64,
+    lat_min: f64,
     cache: &HashMap<LocationKey, Option<Decimal>>,
 ) -> NearestDetailsWithValue<'a> {
     let upper_range = num_points + 1;
@@ -348,15 +394,9 @@ fn grid_points<'a>(
         .unwrap();
     let value = cache_value.map_or(None, |f| f.to_f32());
 
-    let x = (0..upper_range)
-        .map(|x| nearest.nearest_latitude + x as f64 * r1)
-        .chain((0..upper_range).map(|x| nearest.nearest_latitude - x as f64 * r1));
-    let y = (0..upper_range)
-        .map(|x| nearest.nearest_longitude + x as f64 * r2)
-        .chain((0..upper_range).map(|x| nearest.nearest_longitude - x as f64 * r2));
+    let coordinates = make_coordinates(nearest, upper_range, r1, r2, lat_max, lat_min);
 
-    let first_none_null = x
-        .cartesian_product(y)
+    let first_none_null = coordinates.iter()
         .map(|coord| {
             let latitude = coord.0;
             let longitude = coord.1;
@@ -399,7 +439,7 @@ fn grid_points<'a>(
             nearest_longitude: nearest.longitude,
             location: nearest.location,
             distance: nearest.distance,
-            value,
+            value: value,
         },
     }
 }
@@ -448,6 +488,7 @@ pub(crate) fn impl_find_nearest_none_null(
     let r2 = (get_index(lons, 0).abs() - get_index(lons, 1).abs()).abs();
 
     let num_grids = (max_distance / distance as f64).ceil() as i32;
+    println!("num_grids {}", num_grids);
 
     let to_find_lats = &coordinates[3];
     let to_find_lons = &coordinates[4];
@@ -459,6 +500,13 @@ pub(crate) fn impl_find_nearest_none_null(
         identifiers.utf8()?.into_iter()
     );
 
+    let lat_max: f64 = lats.max().unwrap();
+    let lat_min: f64 = lats.min().unwrap();
+    //let lon_max: f64 = lons.max().unwrap();
+    //let lon_min: f64 = lons.min().unwrap();
+
+    //println!("r1 {} r2 {} lat_max {} lat_min {} lon_max {} lon_min {}", r1, r2, lat_max, lat_min, lon_max, lon_min);
+
     let nearest_details: Vec<_> = to_find_points
         .map_while(|point_to_find| {
             let latitude = point_to_find.0.map_or_else(|| 0.0f64, |f| f);
@@ -466,8 +514,7 @@ pub(crate) fn impl_find_nearest_none_null(
             let location = point_to_find.2;
 
             let nearest = nearest_coordinates(lats, lons, latitude, longitude, location);
-            println!("nearest = {:?}", nearest);
-            let points = grid_points(nearest, location, num_grids, r1, r2, &cache);
+            let points = grid_points(nearest, location, num_grids, r1, r2, lat_max, lat_min, &cache);
             Some(points)
         })
         .collect();
@@ -485,7 +532,7 @@ pub(crate) fn impl_find_nearest_none_null(
         ]
     )?;
 
-    println!("out_df = {:?}", out_df);
+   // println!("out_df = {:?}", out_df);
 
     Ok(out_df.into_struct("nearest").into_series())
 }
@@ -619,7 +666,7 @@ pub(crate) fn impl_find_nearest_multiple(
 mod test {
 
     use crate::nearest::*;
-    use polars::prelude::*;
+
 
     #[test]
     fn test_nearest_none_null() {
