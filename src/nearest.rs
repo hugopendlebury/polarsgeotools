@@ -1,16 +1,17 @@
+use core::f32;
 use haversine::Location;
 use itertools::{izip, Itertools};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
 use log::info;
 use polars::prelude::*;
-use serde::Deserialize;
-
-/* 
-use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
+use serde::Deserialize;
 use std::collections::HashMap;
-*/
+
+use crate::nearest;
 
 #[derive(Deserialize)]
 pub struct NumberOfPointKwargs {
@@ -18,12 +19,12 @@ pub struct NumberOfPointKwargs {
     max_distance: u32,
 }
 
-
 #[derive(Deserialize)]
 pub struct MaxDistanceKwargs {
     max_distance: f64,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct NearestDetails<'a> {
     latitude: f64,
     longitude: f64,
@@ -33,7 +34,7 @@ pub struct NearestDetails<'a> {
     distance: f64,
 }
 
-/*
+#[derive(Debug, Copy, Clone)]
 pub struct NearestDetailsWithValue<'a> {
     latitude: f64,
     longitude: f64,
@@ -41,13 +42,11 @@ pub struct NearestDetailsWithValue<'a> {
     nearest_longitude: f64,
     location: Option<&'a str>,
     distance: f64,
-    value: f64,
+    value: Option<f32>,
 }
 
-
-
 #[derive(Debug, Eq, Hash, PartialEq, Copy, Clone)]
-pub struct LocationKey{
+pub struct LocationKey {
     pub lat: Decimal,
     pub lon: Decimal,
 }
@@ -57,10 +56,13 @@ impl LocationKey {
         let lat_value = Decimal::from_f64(lat)?;
         let lon_value = Decimal::from_f64(lon)?;
 
-        Some(LocationKey { lat: lat_value , lon: lon_value})
+        Some(LocationKey {
+            lat: lat_value,
+            lon: lon_value,
+        })
     }
 }
-*/
+
 macro_rules! struct_to_dataframe {
     ($input:expr, [$($field:ident),+]) => {
         {
@@ -270,40 +272,7 @@ pub(crate) fn impl_find_nearest(coordinates: &[Series]) -> Result<Series, Polars
             let lon = point_to_find.1.map_or_else(|| 0.0f64, |f| f);
             let location = point_to_find.2;
 
-            //TODO handle this better
-            let lat_index = (lats - lat).abs().unwrap().arg_min().unwrap();
-            let lon_index = (lons - lon).abs().unwrap().arg_min().unwrap();
-
-            let nearest_lat = lats
-                .f64()
-                .expect("latitudes not f64")
-                .get(lat_index)
-                .expect("latitude was null");
-            let nearest_lon = lons
-                .f64()
-                .expect("longitudes not f64")
-                .get(lon_index)
-                .expect("longitude was null");
-
-            //get the distance
-            let location1 = Location {
-                latitude: nearest_lat,
-                longitude: nearest_lon,
-            };
-            let location2 = Location {
-                latitude: lat,
-                longitude: lon,
-            };
-            let dist = haversine::distance(location1, location2, haversine::Units::Kilometers);
-
-            NearestDetails {
-                latitude: lat,
-                longitude: lon,
-                nearest_latitude: nearest_lat,
-                nearest_longitude: nearest_lon,
-                location,
-                distance: dist,
-            }
+            nearest_coordinates(lats, lons, lat, lon, location)
         })
         .collect();
 
@@ -322,42 +291,168 @@ pub(crate) fn impl_find_nearest(coordinates: &[Series]) -> Result<Series, Polars
     Ok(out_df?.into_struct("nearest").into_series())
 }
 
+fn nearest_coordinates<'a>(
+    lats: &Series,
+    lons: &Series,
+    latitude: f64,
+    longitude: f64,
+    location: Option<&'a str>,
+) -> NearestDetails<'a> {
+    //TODO handle this better
+    let lat_index = (lats - latitude).abs().unwrap().arg_min().unwrap();
+    let lon_index = (lons - longitude).abs().unwrap().arg_min().unwrap();
+
+    let nearest_lat = lats
+        .f64()
+        .expect("latitudes not f64")
+        .get(lat_index)
+        .expect("latitude was null");
+    let nearest_lon = lons
+        .f64()
+        .expect("longitudes not f64")
+        .get(lon_index)
+        .expect("longitude was null");
+
+    //get the distance
+    let location1 = Location {
+        latitude: nearest_lat,
+        longitude: nearest_lon,
+    };
+    let location2 = Location {
+        latitude: latitude,
+        longitude: longitude,
+    };
+    let dist = haversine::distance(location1, location2, haversine::Units::Kilometers);
+
+    NearestDetails {
+        latitude: latitude,
+        longitude: longitude,
+        nearest_latitude: nearest_lat,
+        nearest_longitude: nearest_lon,
+        location,
+        distance: dist,
+    }
+}
+
+fn grid_points<'a>(
+    nearest: NearestDetails<'a>,
+    location: Option<&'a str>,
+    num_points: i32,
+    r1: f64,
+    r2: f64,
+    cache: &HashMap<LocationKey, Option<Decimal>>,
+) -> NearestDetailsWithValue<'a> {
+    let upper_range = num_points + 1;
+
+    let cache_value = cache
+        .get(&LocationKey::from_f64(nearest.nearest_latitude, nearest.nearest_longitude).unwrap())
+        .unwrap();
+    let value = cache_value.map_or(None, |f| f.to_f32());
+
+    let x = (0..upper_range)
+        .map(|x| nearest.nearest_latitude + x as f64 * r1)
+        .chain((0..upper_range).map(|x| nearest.nearest_latitude - x as f64 * r1));
+    let y = (0..upper_range)
+        .map(|x| nearest.nearest_longitude + x as f64 * r2)
+        .chain((0..upper_range).map(|x| nearest.nearest_longitude - x as f64 * r2));
+
+    let first_none_null = x
+        .cartesian_product(y)
+        .map(|coord| {
+            let latitude = coord.0;
+            let longitude = coord.1;
+            let distance = haversine::distance(
+                Location {
+                    latitude: coord.0,
+                    longitude: coord.1,
+                },
+                Location {
+                    latitude: nearest.latitude,
+                    longitude: nearest.longitude,
+                },
+                haversine::Units::Kilometers,
+            );
+
+            let cache_value = cache
+                .get(&LocationKey::from_f64(latitude, longitude).unwrap())
+                .unwrap();
+            let value = cache_value.map_or(None, |f| f.to_f32());
+
+            NearestDetailsWithValue {
+                latitude: nearest.latitude,
+                longitude: nearest.longitude,
+                nearest_latitude: latitude,
+                nearest_longitude: longitude,
+                location,
+                distance: distance,
+                value: value,
+            }
+        })
+        .sorted_by(|a, b| a.distance.total_cmp(&b.distance))
+        .find(|c| c.value.is_some());
+
+    match first_none_null {
+        Some(v) => v,
+        None => NearestDetailsWithValue {
+            latitude: nearest.latitude,
+            longitude: nearest.longitude,
+            nearest_latitude: nearest.latitude,
+            nearest_longitude: nearest.longitude,
+            location: nearest.location,
+            distance: nearest.distance,
+            value: value,
+        },
+    }
+}
+
+fn get_index(s: &Series, idx: usize) -> f64 {
+    s.f64().expect("should be f64").get(idx).expect("was null")
+}
+
 pub(crate) fn impl_find_nearest_none_null(
     coordinates: &[Series],
     max_distance_kwargs: MaxDistanceKwargs,
 ) -> Result<Series, PolarsError> {
-
+    let max_distance = max_distance_kwargs.max_distance;
     let incomming_lats = &coordinates[0];
     let incomming_lons = &coordinates[1];
-
-    /* 
     let values = &coordinates[2];
-    
-    let values_df = DataFrame::new(vec![incomming_lats.clone(), 
-                                                                    incomming_lons.clone(), values.clone()]);
-                                                                    */
 
-    /* 
     let mut cache = HashMap::<LocationKey, Option<Decimal>>::new();
     let lats_iter = incomming_lats.f64()?.into_iter();
     let lons_iter = incomming_lons.f64()?.into_iter();
-
-
-    let value_vec : Vec<_> = values.f64()?.into_iter().collect();
+    let value_vec: Vec<_> = values.f32()?.into_iter().collect();
 
     lats_iter.zip(lons_iter).enumerate().for_each(|(i, v)| {
         let lat_lon = LocationKey::from_f64(v.0.unwrap(), v.1.unwrap()).unwrap();
-        cache.insert(lat_lon, Decimal::from_f64_retain(value_vec[i].unwrap()));
+        let value = value_vec[i].map_or(f32::NAN, |f| f);
+        cache.insert(lat_lon, Decimal::from_f32_retain(value));
     });
-    */
 
     let lats = &incomming_lats.unique()?.sort(false);
     let lons = &incomming_lons.unique()?.sort(false);
 
+    let distance: i32 = haversine::distance(
+        Location {
+            latitude: get_index(lats, 0),
+            longitude: get_index(lons, 0),
+        },
+        Location {
+            latitude: get_index(lats, 1),
+            longitude: get_index(lons, 1),
+        },
+        haversine::Units::Kilometers,
+    )
+    .floor() as i32;
+
+    let r1 = (get_index(lats, 0).abs() - get_index(lats, 1).abs()).abs();
+    let r2 = (get_index(lons, 0).abs() - get_index(lons, 1).abs()).abs();
+
+    let num_grids = (max_distance / distance as f64).ceil() as i32;
+
     let to_find_lats = &coordinates[3];
     let to_find_lons = &coordinates[4];
     let identifiers = &coordinates[5];
-    
 
     let to_find_points = izip!(
         to_find_lats.f64()?.into_iter(),
@@ -371,70 +466,12 @@ pub(crate) fn impl_find_nearest_none_null(
             let longitude = point_to_find.1.map_or_else(|| 0.0f64, |f| f);
             let location = point_to_find.2;
 
-            //TODO handle this better
-            let lat_binding = (lats - latitude).abs().unwrap();
-            let lat_iter = lat_binding.f64().unwrap().into_no_null_iter();
-            let lon_binding = (lons - longitude).abs().unwrap();
-            let lon_iter = lon_binding.f64().unwrap().into_no_null_iter();
-
-            let sorted_lat = lat_iter.enumerate().sorted_by(|a, b| a.1.total_cmp(&b.1));
-            let sorted_lon = lon_iter.enumerate().sorted_by(|a, b| a.1.total_cmp(&b.1));
-
-            let nearest_indexes = sorted_lat.cartesian_product(sorted_lon);
-            let mut found_all_points = false;
-
-            let results: Vec<NearestDetails> = nearest_indexes
-                .map_while(|indexes| {
-                    if !found_all_points {
-                        let lat_index = indexes.0 .0;
-                        let lon_index = indexes.1 .0;
-                        let nearest_latitude = lats
-                            .f64()
-                            .expect("latitudes not f64")
-                            .get(lat_index)
-                            .expect("latitude was null");
-                        let nearest_longitude = lons
-                            .f64()
-                            .expect("longitudes not f64")
-                            .get(lon_index)
-                            .expect("longitude was null");
-
-                        //get the distance
-                        let location1 = Location {
-                            latitude: nearest_latitude,
-                            longitude: nearest_longitude,
-                        };
-                        let location2 = Location {
-                            latitude,
-                            longitude,
-                        };
-
-                        let distance =
-                            haversine::distance(location1, location2, haversine::Units::Kilometers);
-
-                        //let lkp_key = LocationKey::from_f64(nearest_latitude, nearest_longitude).unwrap();
-
-                        //let value = cache.get(&lkp_key)?;
-
-                        if distance < max_distance_kwargs.max_distance  {
-                            Some(NearestDetails {
-                                latitude,
-                                longitude,
-                                nearest_latitude,
-                                nearest_longitude,
-                                location,
-                                distance,
-                                //value : value.unwrap().into()
-                            })
-                        } else { 
-                            found_all_points = true;
-                            None 
-                        }
-                    } else { None }
-                }).collect();
-            Some(results)
-        }).flatten().collect();
-
+            let nearest = nearest_coordinates(lats, lons, latitude, longitude, location);
+            println!("nearest = {:?}", nearest);
+            let points = grid_points(nearest, location, num_grids, r1, r2, &cache);
+            Some(points)
+        })
+        .collect();
 
     let out_df = struct_to_dataframe!(
         nearest_details,
@@ -444,51 +481,15 @@ pub(crate) fn impl_find_nearest_none_null(
             nearest_longitude,
             nearest_latitude,
             location,
-            distance
+            distance,
+            value
         ]
     )?;
 
     println!("out_df = {:?}", out_df);
 
-    /* 
-    let joined = values_df?.join(&out_df, 
-    [incomming_lats.name(), incomming_lons.name()], 
-    ["nearest_latitude", "nearest_longitude"], JoinArgs::new(JoinType::Inner));
-
-    
-        joined?.sort(["location", "distance"] , false, true)
-        ?.lazy().group_by(["location", "latitude_right", "longitude_right"])
-        .agg([
-             col("value").is_not_null().alias("value_flags")
-            ,col("value")
-            ,col("distance")
-            ,col("latitude")
-            ,col("longitude")
-        ]).with_columns([
-            col("value_flags")
-        ]);
-
-        .agg(
-            col("value").is_not_null().alias("value_flags"),
-            col("value"),
-            col("distance"),
-            col("latitude"),
-            col("longitude")
-        ).with_columns(
-            index = pl.col("value_flags").list.eval((pl.element() == True).cast(pl.UInt8).arg_max()).list.get(0)
-        ).with_columns(
-            distance = pl.col("distance").list.get(pl.col("index"))
-            ,value = pl.col("value").list.get(pl.col("index"))
-            ,latitude = pl.col("latitude").list.get(pl.col("index"))
-            ,longitude = pl.col("longitude").list.get(pl.col("index"))
-        ).select(pl.exclude("value_flags", "index"));
-    */
-
-    //let _ =joined?.lazy().sink_parquet("/var/tmp/joined.parquet".into(), ParquetWriteOptions::default());
-
     Ok(out_df.into_struct("nearest").into_series())
 }
-
 
 pub(crate) fn impl_find_nearest_multiple(
     coordinates: &[Series],
@@ -615,39 +616,44 @@ pub(crate) fn impl_find_nearest_multiple(
     Ok(out_df?.into_struct("nearest").into_series())
 }
 
-
 #[cfg(test)]
 mod test {
 
-    use polars::prelude::*;
     use crate::nearest::*;
+    use polars::prelude::*;
 
     #[test]
     fn test_nearest_none_null() {
-
         let locations = df!(
             "place" => &["Canary Wharf", "Manchester", "Lewes"],
             "lats" => &[51.5054, 53.4808, 52.5227],
             "lons" => &[-0.027176, 2.2426, 0.0027],
-  
-        ).unwrap();
+
+        )
+        .unwrap();
 
         let test_data_path = concat!(env!("CARGO_MANIFEST_DIR"), "/test_data/swh.parquet");
-        let df = LazyFrame::scan_parquet(test_data_path, Default::default()).unwrap().collect().unwrap();
+        let df = LazyFrame::scan_parquet(test_data_path, Default::default())
+            .unwrap()
+            .collect()
+            .unwrap();
 
-        let argss = &[
+        let args = &[
             df["latitude"].clone(),
             df["longitude"].clone(),
             df["value"].clone(),
             locations["lats"].clone(),
             locations["lons"].clone(),
-            locations["place"].clone()
+            locations["place"].clone(),
         ];
 
-
-        let results = impl_find_nearest_none_null(argss, MaxDistanceKwargs{max_distance:75.0});
+        let results = impl_find_nearest_none_null(
+            args,
+            MaxDistanceKwargs {
+                max_distance: 100.0,
+            },
+        );
 
         println!("results = {:?}", results)
-
     }
 }
