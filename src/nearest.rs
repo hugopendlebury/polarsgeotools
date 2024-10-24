@@ -11,7 +11,6 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use crate::nearest;
 
 #[derive(Deserialize)]
 pub struct NumberOfPointKwargs {
@@ -319,14 +318,14 @@ fn nearest_coordinates<'a>(
         longitude: nearest_lon,
     };
     let location2 = Location {
-        latitude: latitude,
-        longitude: longitude,
+        latitude,
+        longitude,
     };
     let dist = haversine::distance(location1, location2, haversine::Units::Kilometers);
 
     NearestDetails {
-        latitude: latitude,
-        longitude: longitude,
+        latitude,
+        longitude,
         nearest_latitude: nearest_lat,
         nearest_longitude: nearest_lon,
         location,
@@ -384,8 +383,8 @@ fn grid_points<'a>(
                 nearest_latitude: latitude,
                 nearest_longitude: longitude,
                 location,
-                distance: distance,
-                value: value,
+                distance,
+                value,
             }
         })
         .sorted_by(|a, b| a.distance.total_cmp(&b.distance))
@@ -400,7 +399,7 @@ fn grid_points<'a>(
             nearest_longitude: nearest.longitude,
             location: nearest.location,
             distance: nearest.distance,
-            value: value,
+            value,
         },
     }
 }
