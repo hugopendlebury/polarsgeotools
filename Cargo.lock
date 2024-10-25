@@ -1699,7 +1699,7 @@ dependencies = [
 
 [[package]]
 name = "polarsgeoutils"
-version = "0.34.24"
+version = "0.34.25"
 dependencies = [
  "chrono",
  "chrono-tz 0.10.0",

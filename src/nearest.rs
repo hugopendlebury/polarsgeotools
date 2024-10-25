@@ -3,11 +3,12 @@ use haversine::Location;
 use itertools::{izip, Itertools};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
-use log::info;
+use log::info; 
 use polars::prelude::*;
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
+use rust_decimal::Error;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -35,13 +36,15 @@ pub struct NearestDetails<'a> {
 
 /* 
 #[derive(Debug, Copy, Clone)]
-pub struct CoordinateWithLevel {
-    grid_level: u16,
+pub struct CoordinateWithDepth {
     latitude: f64,
     longitude: f64,
+    depth_lat: Decimal,
+    depth_lon: Decimal,
+    total_depth: Decimal,
+    distance: f64,
 }
 */
-
 
 #[derive(Debug, Copy, Clone)]
 pub struct NearestDetailsWithValue<'a> {
@@ -62,8 +65,8 @@ pub struct LocationKey {
 
 impl LocationKey {
     pub fn from_f64(lat: f64, lon: f64) -> Option<LocationKey> {
-        let lat_value = Decimal::from_f64(lat)?;
-        let lon_value = Decimal::from_f64(lon)?;
+        let lat_value = Decimal::from_f64(lat)?.round_dp(3);
+        let lon_value = Decimal::from_f64(lon)?.round_dp(3);
 
         Some(LocationKey {
             lat: lat_value,
@@ -350,9 +353,13 @@ fn make_coordinates<'a> (nearest: NearestDetails<'a>,
                         lat_max: f64,
                         lat_min: f64) -> Vec<(f64, f64)> {
 
+    //println!("nearest {:?}", nearest);
+    //println!("new");
+
     let mut latitudes : Vec<f64> = Vec::with_capacity((upper_range * 2) as usize);
     let mut longitudes : Vec<f64> = Vec::with_capacity((upper_range * 2) as usize);
     let mut coordinates : Vec<(f64, f64)> = Vec::with_capacity(upper_range  as usize * upper_range as usize);
+    //let mut coordinate_depth: Vec<CoordinateWithDepth> = Vec::with_capacity(upper_range  as usize * upper_range as usize);
 
     (0..upper_range).for_each(|c| {
         let latitude_plus = nearest.nearest_latitude + c as f64 * r1;
@@ -369,7 +376,12 @@ fn make_coordinates<'a> (nearest: NearestDetails<'a>,
     });
 
     latitudes.iter().cartesian_product(longitudes.iter()).for_each(|coord| {
-        coordinates.push((*coord.0, *coord.1))
+        let latitude = *coord.0;
+        let longitude = *coord.1;
+
+        coordinates.push((latitude, longitude));
+
+
     });
 
     coordinates
@@ -389,59 +401,79 @@ fn grid_points<'a>(
 ) -> NearestDetailsWithValue<'a> {
     let upper_range = num_points + 1;
 
+    let location_key = LocationKey::from_f64(nearest.nearest_latitude, nearest.nearest_longitude);
+
     let cache_value = cache
-        .get(&LocationKey::from_f64(nearest.nearest_latitude, nearest.nearest_longitude).unwrap())
+        .get(&location_key.unwrap())
         .unwrap();
     let value = cache_value.map_or(None, |f| f.to_f32());
 
-    let coordinates = make_coordinates(nearest, upper_range, r1, r2, lat_max, lat_min);
-
-    let first_none_null = coordinates.iter()
-        .map(|coord| {
-            let latitude = coord.0;
-            let longitude = coord.1;
-            let distance = haversine::distance(
-                Location {
-                    latitude: coord.0,
-                    longitude: coord.1,
-                },
-                Location {
-                    latitude: nearest.latitude,
-                    longitude: nearest.longitude,
-                },
-                haversine::Units::Kilometers,
-            );
-
-            let cache_value = cache
-                .get(&LocationKey::from_f64(latitude, longitude).unwrap())
-                .unwrap();
-            let value = cache_value.map_or(None, |f| f.to_f32());
-
+    match value {
+        Some(v) => {
             NearestDetailsWithValue {
                 latitude: nearest.latitude,
                 longitude: nearest.longitude,
-                nearest_latitude: latitude,
-                nearest_longitude: longitude,
-                location,
-                distance,
-                value,
+                nearest_latitude: nearest.nearest_latitude,
+                nearest_longitude: nearest.nearest_longitude,
+                location: nearest.location,
+                distance: nearest.distance,
+                value: Some(v)
             }
-        })
-        .sorted_by(|a, b| a.distance.total_cmp(&b.distance))
-        .find(|c| c.value.is_some());
+        }
+        None => {
+            let coordinates = make_coordinates(nearest, upper_range, r1, r2, lat_max, lat_min);
 
-    match first_none_null {
-        Some(v) => v,
-        None => NearestDetailsWithValue {
-            latitude: nearest.latitude,
-            longitude: nearest.longitude,
-            nearest_latitude: nearest.nearest_latitude,
-            nearest_longitude: nearest.nearest_longitude,
-            location: nearest.location,
-            distance: nearest.distance,
-            value: value,
-        },
+            let first_none_null = coordinates.iter()
+                .map(|coord| {
+                    let latitude = coord.0;
+                    let longitude = coord.1;
+                    let distance = haversine::distance(
+                        Location {
+                            latitude: coord.0,
+                            longitude: coord.1,
+                        },
+                        Location {
+                            latitude: nearest.latitude,
+                            longitude: nearest.longitude,
+                        },
+                        haversine::Units::Kilometers,
+                    );
+        
+                    let cache_location_key = LocationKey::from_f64(latitude, longitude);
+                    let cache_value = cache
+                        .get(&cache_location_key.unwrap());
+        
+                    let value = cache_value.unwrap().map_or(None, |f| f.to_f32());
+        
+                    NearestDetailsWithValue {
+                        latitude: nearest.latitude,
+                        longitude: nearest.longitude,
+                        nearest_latitude: latitude,
+                        nearest_longitude: longitude,
+                        location,
+                        distance,
+                        value,
+                    }
+                })
+                .sorted_by(|a, b| a.distance.total_cmp(&b.distance))
+                .find(|c| c.value.is_some());
+        
+            match first_none_null {
+                Some(v) => v,
+                None => NearestDetailsWithValue {
+                    latitude: nearest.latitude,
+                    longitude: nearest.longitude,
+                    nearest_latitude: nearest.nearest_latitude,
+                    nearest_longitude: nearest.nearest_longitude,
+                    location: nearest.location,
+                    distance: nearest.distance,
+                    value: value,
+                }
+            }
+        }
     }
+
+
 }
 
 fn get_index(s: &Series, idx: usize) -> f64 {
@@ -501,10 +533,6 @@ pub(crate) fn impl_find_nearest_none_null(
 
     let lat_max: f64 = lats.max().unwrap();
     let lat_min: f64 = lats.min().unwrap();
-    //let lon_max: f64 = lons.max().unwrap();
-    //let lon_min: f64 = lons.min().unwrap();
-
-    //println!("r1 {} r2 {} lat_max {} lat_min {} lon_max {} lon_min {}", r1, r2, lat_max, lat_min, lon_max, lon_min);
 
     let nearest_details: Vec<_> = to_find_points
         .map_while(|point_to_find| {
@@ -513,6 +541,7 @@ pub(crate) fn impl_find_nearest_none_null(
             let location = point_to_find.2;
 
             let nearest = nearest_coordinates(lats, lons, latitude, longitude, location);
+
             let points = grid_points(nearest, location, num_grids, r1, r2, lat_max, lat_min, &cache);
             Some(points)
         })
@@ -530,8 +559,6 @@ pub(crate) fn impl_find_nearest_none_null(
             value
         ]
     )?;
-
-   // println!("out_df = {:?}", out_df);
 
     Ok(out_df.into_struct("nearest").into_series())
 }
