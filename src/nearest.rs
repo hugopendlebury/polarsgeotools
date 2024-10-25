@@ -435,8 +435,8 @@ fn grid_points<'a>(
         None => NearestDetailsWithValue {
             latitude: nearest.latitude,
             longitude: nearest.longitude,
-            nearest_latitude: nearest.latitude,
-            nearest_longitude: nearest.longitude,
+            nearest_latitude: nearest.nearest_latitude,
+            nearest_longitude: nearest.nearest_longitude,
             location: nearest.location,
             distance: nearest.distance,
             value: value,
@@ -488,7 +488,6 @@ pub(crate) fn impl_find_nearest_none_null(
     let r2 = (get_index(lons, 0).abs() - get_index(lons, 1).abs()).abs();
 
     let num_grids = (max_distance / distance as f64).ceil() as i32;
-    println!("num_grids {}", num_grids);
 
     let to_find_lats = &coordinates[3];
     let to_find_lons = &coordinates[4];
